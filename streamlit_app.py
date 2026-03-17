@@ -33,6 +33,7 @@ embeddings, pc = load_models()
 with st.sidebar:
     st.header("⚙️ Settings")
     if st.button("🔄 Sync Data to Cloud"):
+        # Check if Data folder exists
         if not os.path.exists("Data"):
             st.error("'Data' folder not found! Please ensure it exists in your repository.")
         else:
@@ -42,8 +43,9 @@ with st.sidebar:
                     loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
                     docs = loader.load()
                     
-                    # 2. Split Text
-                    splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=50)
+                    # 2. Split Text - Optimized for better context retention
+                    # chunk_size-ийг 500 болгож, overlap-ийг 100 болгож нэмлээ
+                    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
                     texts = splitter.split_documents(docs)
                     
                     # 3. Save to Pinecone
@@ -73,27 +75,32 @@ if query:
                     pinecone_api_key=pinecone_api_key
                 )
                 
-                search_results = vectorstore.similarity_search(query, k=3)
+                # Хайлтын үр дүнг 3 байсныг 7 болгож нэмсэн (илүү их мэдээлэл AI-д очно)
+                search_results = vectorstore.similarity_search(query, k=7)
                 context = "\n\n".join([doc.page_content for doc in search_results])
                 
                 # 2. Generate Answer with Gemini
                 llm = ChatGoogleGenerativeAI(
-                    model="gemini-2.5-flash-lite", 
+                    model="gemini-1.5-flash", # Тогтвортой ажиллагааны үүднээс 1.5-flash ашиглахыг зөвлөж байна
                     google_api_key=google_api_key,
-                    temperature=0.1
+                    temperature=0.1 # Илүү бодитой хариулт өгүүлэх
                 )
                 
-                # Instruction in Mongolian to ensure the response language
+                # Сайжруулсан Промпт (Зааварчилгаа)
                 prompt = f"""
-                Та бол Central Test компанийн албан ёсны туслах AI байна. 
-                Доорх мэдээлэлд үндэслэн асуултанд монгол хэлээр маш тодорхой хариулна уу.
+                Та бол Central Test компанийн албан ёсны AI туслах байна. 
+                Доорх 'Мэдээлэл' хэсэгт байгаа текст дээр тулгуурлан хэрэглэгчийн асуултанд маш дэлгэрэнгүй, эелдэг хариулна уу.
                 
                 Мэдээлэл:
                 {context}
                 
                 Асуулт: {query}
                 
-                Хэрэв өгөгдсөн мэдээлэл дотор хариулт байхгүй бол "Уучлаарай, миний мэдээллийн санд энэ талаар мэдээлэл алга байна." гэж хариулаарай.
+                ХАРИУЛАХ ЗААВАР:
+                1. Зөвхөн өгөгдсөн 'Мэдээлэл' доторх текстийг ашигла.
+                2. Хэрэв мэдээлэл дотор хариулт байвал түүнийг логиктой, эмх цэгцтэй (магадгүй жагсаалтаар) тайлбарла.
+                3. Хэрэв асуултанд хариулах мэдээлэл огт байхгүй бол "Уучлаарай, миний мэдээллийн санд энэ талаарх мэдээлэл алга байна. Та асуултаа арай өөрөөр асууж үзнэ үү?" гэж хариулаарай.
+                4. Хэзээ ч мэдээллийн санд байхгүй зүйлийг өөрөө зохиож хариулж болохгүй.
                 """
                 
                 response = llm.invoke(prompt)
@@ -103,7 +110,7 @@ if query:
                 st.write(response.content)
                 
                 # Sources for transparency
-                with st.expander("View Source Context"):
+                with st.expander("View Source Context (DEBUG)"):
                     st.info(context)
                     
             except Exception as e:
