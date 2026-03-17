@@ -18,7 +18,7 @@ st.markdown("---")
 
 # Pinecone холболт (Таны үүсгэсэн 'quickstart' индекс)
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index_name = "quickstart" 
+index_name = "centralai" 
 
 # Текстүүдийг вектор болгох модел (Dimensions: 384)
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
