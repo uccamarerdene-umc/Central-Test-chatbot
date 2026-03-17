@@ -78,7 +78,7 @@ if query:
                 
                 # 2. Generate Answer with Gemini
                 llm = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash", 
+                    model="gemini-2.5-flash-lite", 
                     google_api_key=google_api_key,
                     temperature=0.1
                 )
