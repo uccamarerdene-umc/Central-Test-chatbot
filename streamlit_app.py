@@ -39,7 +39,7 @@ with st.sidebar:
             with st.spinner("Reading documents and uploading to Pinecone..."):
                 try:
                     # 1. Load Files
-                    loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
+                    loader = DirectoryLoader(".", glob="./*.docx", loader_cls=Docx2txtLoader)
                     docs = loader.load()
                     
                     # 2. Split Text
