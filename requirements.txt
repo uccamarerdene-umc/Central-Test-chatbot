@@ -1,6 +1,6 @@
 streamlit
 langchain
-langchain-google-genai
+langchain-google-genai>=2.0.0 
 langchain-pinecone
 langchain-community
 langchain-huggingface
