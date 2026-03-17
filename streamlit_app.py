@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pinecone import Pinecone
 
 # 1. Configuration and Secrets
-st.set_page_config(page_title="Central Test AI", page_icon="🤖")
+st.set_page_config(page_title="Central Test AI Assistant", page_icon="🤖")
 
 google_api_key = st.secrets.get("GOOGLE_API_KEY")
 pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
@@ -18,75 +18,75 @@ st.markdown("---")
 
 index_name = "centralai"
 
-# 2. Model Loading (Cached)
+# 2. Model Loading (Cached for Performance)
 @st.cache_resource
 def load_models():
-    # Embedding model (Dimensions: 384)
+    # Embedding model: 384 dimensions for all-MiniLM-L6-v2
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    # Pinecone connection
+    # Pinecone initialization
     pc = Pinecone(api_key=pinecone_api_key)
     return embeddings, pc
 
 embeddings, pc = load_models()
 
-# 3. Sidebar - Data Synchronization
+# 3. Sidebar - Data Management
 with st.sidebar:
     st.header("⚙️ Settings")
     if st.button("🔄 Sync Data to Cloud"):
-        # Check if Data folder exists
+        # Verifying the existence of the Data folder
         if not os.path.exists("Data"):
-            st.error("'Data' folder not found! Please ensure it exists in your repository.")
+            st.error("'Data' folder not found! Please check your directory structure.")
         else:
-            with st.spinner("Reading documents and uploading to Pinecone..."):
+            with st.spinner("Processing documents and updating Pinecone..."):
                 try:
-                    # 1. Load Files
+                    # 1. Load Documents
                     loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
                     docs = loader.load()
                     
-                    # 2. Split Text - Optimized for better context retention
-                    # chunk_size-ийг 500 болгож, overlap-ийг 100 болгож нэмлээ
+                    # 2. Optimized Text Splitting (Chunking)
+                    # Smaller chunks with higher overlap improve retrieval accuracy
                     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
                     texts = splitter.split_documents(docs)
                     
-                    # 3. Save to Pinecone
+                    # 3. Upsert to Pinecone
                     PineconeVectorStore.from_documents(
                         texts, 
                         embeddings, 
                         index_name=index_name,
                         pinecone_api_key=pinecone_api_key
                     )
-                    st.success(f"Successfully uploaded {len(texts)} chunks to Pinecone!")
+                    st.success(f"Successfully synced {len(texts)} text blocks to Pinecone!")
                 except Exception as e:
-                    st.error(f"Error during data sync: {e}")
+                    st.error(f"Sync failed: {e}")
 
 # 4. Chat Interface
-query = st.text_input("Ask a question:", placeholder="Ask about Central Test...")
+query = st.text_input("Ask a question:", placeholder="Search the Central Test knowledge base...")
 
 if query:
     if not google_api_key or not pinecone_api_key:
-        st.warning("API keys are missing. Please check your Streamlit Secrets.")
+        st.warning("API keys are missing. Please verify your Streamlit Secrets.")
     else:
-        with st.spinner("AI is thinking..."):
+        with st.spinner("Analyzing data and generating response..."):
             try:
-                # 1. Search in Pinecone
+                # 1. Semantic Search in Pinecone
                 vectorstore = PineconeVectorStore(
                     index_name=index_name, 
                     embedding=embeddings,
                     pinecone_api_key=pinecone_api_key
                 )
                 
-                # Хайлтын үр дүнг 3 байсныг 7 болгож нэмсэн (илүү их мэдээлэл AI-д очно)
+                # Retrieving top 7 most relevant context segments
                 search_results = vectorstore.similarity_search(query, k=7)
                 context = "\n\n".join([doc.page_content for doc in search_results])
                 
-                # 2. Generate Answer with Gemini
+                # 2. LLM Configuration
                 llm = ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash", # Тогтвортой ажиллагааны үүднээс 1.5-flash ашиглахыг зөвлөж байна
+                    model="gemini-2.5-flash-lite", 
                     google_api_key=google_api_key,
-                    temperature=0.1 # Илүү бодитой хариулт өгүүлэх
+                    temperature=0.1
                 )
                 
-                # Сайжруулсан Промпт (Зааварчилгаа)
+                # Mongolian prompt ensures the AI responds in the correct language and context
                 prompt = f"""
                 Та бол Central Test компанийн албан ёсны AI туслах байна. 
                 Доорх 'Мэдээлэл' хэсэгт байгаа текст дээр тулгуурлан хэрэглэгчийн асуултанд маш дэлгэрэнгүй, эелдэг хариулна уу.
@@ -105,13 +105,13 @@ if query:
                 
                 response = llm.invoke(prompt)
                 
-                # Display Results
+                # Output results to the user
                 st.markdown("### 🤖 AI Response:")
                 st.write(response.content)
                 
-                # Sources for transparency
-                with st.expander("View Source Context (DEBUG)"):
+                # Transparency section
+                with st.expander("Show retrieved data (Source context)"):
                     st.info(context)
                     
             except Exception as e:
-                st.error(f"An error occurred: {e}")
+                st.error(f"System error: {e}")
