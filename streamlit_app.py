@@ -4,8 +4,8 @@ from langchain_pinecone import PineconeVectorStore
 
 st.set_page_config(page_title="Central Test AI", page_icon="🤖")
 
-google_api_key = st.secrets["GOOGLE_API_KEY"]
-pinecone_api_key = st.secrets["PINECONE_API_KEY"]
+google_api_key = st.secrets["AIzaSyCpcv6TOO4E-pe7BgZYMA_BJeOw6y-zRdI"]
+pinecone_api_key = st.secrets["pcsk_65ZC2g_4k2eyNb9EAaAQ4g3rfFdHFKqbTDmKRGMxfgTV5NLLjaTYBFiK154icTn4ggGXaM"]
 
 index_name = "centralai"
 
