@@ -23,7 +23,7 @@ index_name = "centralai"
 def load_models():
     # HIGH QUALITY: Google text-embedding-004 (768 dimensions)
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004",
+        model="gemini-embedding-001",
         google_api_key=google_api_key
     )
     pc = Pinecone(api_key=pinecone_api_key)
