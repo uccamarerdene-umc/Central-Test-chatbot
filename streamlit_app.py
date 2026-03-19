@@ -6,20 +6,20 @@ from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pinecone import Pinecone
 
-# 1. Configuration and Secrets
+# 1. Тохиргоо
 st.set_page_config(page_title="Central Test AI Assistant", page_icon="🤖")
 
 google_api_key = st.secrets.get("GOOGLE_API_KEY")
 pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
 index_name = "centralai"
 
-# 2. Model Loading (Cached for Performance)
+# 2. Модель ачааллах (Кэш ашиглах)
 @st.cache_resource
 def load_models():
-    # 404 алдаанаас сэргийлж хамгийн тогтвортой 'embedding-001' моделийг ашиглав
-    # Энэ нь 768 хэмжээстэй тул таны Pinecone-той яг таарна.
+    # 404 NOT_FOUND алдаанаас сэргийлж 'models/' угтваргүй бичив.
+    # Энэ модель 768 хэмжээстэй тул таны Pinecone index-тэй яг таарна.
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/embedding-001", 
+        model="embedding-001", 
         google_api_key=google_api_key
     )
     pc = Pinecone(api_key=pinecone_api_key)
@@ -31,41 +31,43 @@ if not google_api_key or not pinecone_api_key:
 
 embeddings, pc = load_models()
 
-# 3. Sidebar - Data Management (Sync)
+# 3. Sidebar - Өгөгдөл синхрончлох (Sync)
 with st.sidebar:
     st.header("⚙️ Settings")
     if st.button("🔄 Sync Data to Cloud"):
         if not os.path.exists("Data"):
-            st.error("'Data' folder not found! Please ensure it exists in your GitHub repo.")
+            st.error("'Data' хавтас олдсонгүй! GitHub репозитортоо 'Data' хавтас үүсгэж, .docx файлуудаа хийнэ үү.")
         else:
-            with st.spinner("Processing documents and updating Pinecone..."):
+            with st.spinner("Баримтуудыг боловсруулж, Pinecone-руу илгээж байна..."):
                 try:
+                    # 1. Файл унших
                     loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
                     docs = loader.load()
 
                     if not docs:
-                        st.warning("No .docx files found in the 'Data' folder.")
+                        st.warning("Data хавтсанд .docx файл олдсонгүй.")
                     else:
+                        # 2. Текстийг хэсэгчлэн хуваах
                         splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
                         texts = splitter.split_documents(docs)
 
-                        # Хуучин өгөгдлийг цэвэрлэх эсвэл шууд нэмэх
+                        # 3. Pinecone-руу хадгалах
                         PineconeVectorStore.from_documents(
                             texts, 
                             embeddings, 
                             index_name=index_name,
                             pinecone_api_key=pinecone_api_key
                         )
-                        st.success(f"Successfully synced {len(texts)} chunks to Pinecone!")
+                        st.success(f"Амжилттай! {len(texts)} хэсэг өгөгдлийг Pinecone-руу хадгаллаа.")
                 except Exception as e:
                     st.error(f"Sync failed: {e}")
 
-# 4. Chat Interface
+# 4. Чатлах хэсэг
 st.title("🤖 Central Test AI Assistant")
-query = st.text_input("Ask a question:", placeholder="Search the Central Test knowledge base...")
+query = st.text_input("Асуултаа бичнэ үү:", placeholder="Central Test-ийн талаар юу мэдэхийг хүсэж байна?")
 
 if query:
-    with st.spinner("Analyzing data and generating response..."):
+    with st.spinner("AI хариулт боловсруулж байна..."):
         try:
             vectorstore = PineconeVectorStore(
                 index_name=index_name, 
@@ -73,10 +75,11 @@ if query:
                 pinecone_api_key=pinecone_api_key
             )
 
+            # Хамгийн хамааралтай 5 хэсгийг хайх
             search_results = vectorstore.similarity_search(query, k=5)
             context = "\n\n".join([doc.page_content for doc in search_results])
 
-            # ЗАСРУУЛГА: Моделийн нэр 'gemini-1.5-flash' байх ёстой
+            # Gemini 1.5-flash ашиглах (моделийн нэрийг зөв бичих)
             llm = ChatGoogleGenerativeAI(
                 model="gemini-1.5-flash", 
                 google_api_key=google_api_key,
@@ -96,11 +99,11 @@ if query:
             response = llm.invoke(prompt)
 
             st.markdown("---")
-            st.markdown("### 🤖 AI Response:")
+            st.markdown("### 🤖 AI Хариулт:")
             st.write(response.content)
 
-            with st.expander("Show retrieved context (Source)"):
+            with st.expander("Эх сурвалж (Source Context)"):
                 st.info(context)
 
         except Exception as e:
-            st.error(f"An error occurred: {e}")
+            st.error(f"Алдаа гарлаа: {e}")
