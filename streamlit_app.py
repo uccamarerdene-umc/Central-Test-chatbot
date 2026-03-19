@@ -1,107 +1,317 @@
-import streamlit as st
-import os
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_community.document_loaders import DirectoryLoader, Docx2txtLoader
-from langchain_pinecone import PineconeVectorStore
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+import streamlit as st 
 
-# 1. Тохиргоо болон Нууц түлхүүрүүд (Streamlit Secrets-ээс уншина)
-st.set_page_config(page_title="Central Test AI", page_icon="🤖")
+import os 
 
-# API Key-үүдийг Secrets-ээс авах (Кодон дотор ил бичиж болохгүй!)
-google_api_key = st.secrets["GOOGLE_API_KEY"]
-pinecone_api_key = st.secrets["PINECONE_API_KEY"]
-index_name = "centralai"
+from langchain_google_genai import ChatGoogleGenerativeAI 
 
-st.title("🤖 Central Test AI Assistant")
-st.markdown("---")
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings 
 
-# 2. Модел ачаалах (Caching) - Google-ийн хамгийн сүүлийн 004 модел
-@st.cache_resource
-def get_embeddings():
-    return GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004", # 768 dimensions
-        google_api_key=google_api_key
-    )
+from langchain_community.document_loaders import DirectoryLoader, Docx2txtLoader 
 
-embeddings = get_embeddings()
+from langchain_pinecone import PineconeVectorStore 
 
-# 3. Sidebar - Датагаа Pinecone руу илгээх (Sync хийх хэсэг заавал хэрэгтэй)
-with st.sidebar:
-    st.header("⚙️ Удирдлага")
-    if st.button("🔄 Датаг Pinecone-руу синхрончлох"):
-        if not os.path.exists("Data"):
-            st.error("'Data' хавтас олдсонгүй!")
-        else:
-            with st.spinner("Файлуудыг уншиж байна..."):
-                try:
-                    # Файлуудыг унших
-                    loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
-                    docs = loader.load()
-                    
-                    # Текстийг жижиглэх
-                    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-                    texts = splitter.split_documents(docs)
-                    
-                    # Pinecone-руу хадгалах
-                    PineconeVectorStore.from_documents(
-                        texts, 
-                        embeddings, 
+from langchain_huggingface import HuggingFaceEmbeddings 
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter 
+
+from pinecone import Pinecone 
+
+# 1. Configuration and Secrets 
+
+st.set_page_config(page_title="Central Test AI Assistant", page_icon="🤖") 
+
+# 1. Configuration 
+
+st.set_page_config(page_title="Central Test AI", page_icon="🤖") 
+
+google_api_key = st.secrets.get("GOOGLE_API_KEY") 
+
+pinecone_api_key = st.secrets.get("PINECONE_API_KEY") 
+
+st.title("🤖 Central Test AI Assistant") 
+
+st.title("🤖 Central Test AI Assistant (Google V4)") 
+
+st.markdown("---") 
+
+index_name = "centralai" 
+
+# Use your new index name here 
+
+index_name = "centralai"  
+
+  
+
+# 2. Model Loading (Cached for Performance) 
+
+# 2. Model Loading 
+
+@st.cache_resource 
+
+def load_models(): 
+
+    # Embedding model: 384 dimensions for all-MiniLM-L6-v2 
+
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2") 
+
+    # Pinecone initialization 
+
+    # HIGH QUALITY: Google text-embedding-004 (768 dimensions) 
+
+    embeddings = GoogleGenerativeAIEmbeddings( 
+
+        model="models/text-embedding-004", 
+
+        google_api_key=google_api_key 
+
+    ) 
+    
+    pc = Pinecone(api_key=pinecone_api_key) 
+
+    return embeddings, pc 
+
+embeddings, pc = load_models() 
+
+# 3. Sidebar - Data Management 
+
+# 3. Sidebar - Sync Data 
+
+with st.sidebar: 
+
+    st.header("⚙️ Settings") 
+
+    if st.button("🔄 Sync Data to Cloud"): 
+
+        # Verifying the existence of the Data folder 
+
+    if st.button("🔄 Sync Data (Google V4)"): 
+
+        if not os.path.exists("Data"): 
+
+            st.error("'Data' folder not found! Please check your directory structure.") 
+
+            st.error("'Data' folder not found!") 
+
+        else: 
+
+            with st.spinner("Processing documents and updating Pinecone..."): 
+
+            with st.spinner("Uploading to Pinecone with 768 Dimensions..."): 
+
+                try: 
+
+                    # 1. Load Documents 
+
+                    loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader) 
+
+                    docs = loader.load() 
+
+                    # 2. Optimized Text Splitting (Chunking) 
+
+                    # Smaller chunks with higher overlap improve retrieval accuracy 
+
+                    # Optimized chunking for higher quality 
+
+                    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100) 
+
+                    texts = splitter.split_documents(docs) 
+
+                    # 3. Upsert to Pinecone 
+
+                    # Create new vectorstore 
+
+                    PineconeVectorStore.from_documents( 
+
+                        texts,  
+
+                        embeddings,  
+
                         index_name=index_name, 
-                        pinecone_api_key=pinecone_api_key
-                    )
-                    st.success(f"Амжилттай! {len(texts)} хэсэг өгөгдөл хадгалагдлаа.")
-                except Exception as e:
-                    st.error(f"Алдаа гарлаа: {e}")
 
-# 4. Чат болон Хайлт хийх хэсэг
-query = st.text_input("Асуултаа энд бичнэ үү:", placeholder="Жишээ нь: Central Test гэж юу вэ?")
+                        pinecone_api_key=pinecone_api_key 
 
-if query:
-    with st.spinner("AI хариулт бэлдэж байна..."):
-        try:
-            # Pinecone-оос хайх
-            vectorstore = PineconeVectorStore(
-                index_name=index_name, 
-                embedding=embeddings, 
-                pinecone_api_key=pinecone_api_key
-            )
-            
-            # Хамгийн ойр 5 илэрцийг хайх
-            docs = vectorstore.similarity_search(query, k=5)
-            context = "\n\n".join([doc.page_content for doc in docs])
-            
-            # Gemini моделтой холбогдох
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash", 
-                google_api_key=google_api_key, 
-                temperature=0.1
-            )
-            
-            # Зааварчилгаа (Prompt)
-            prompt = f"""
-            Та бол Central Test компанийн албан ёсны AI туслах байна. 
-            Доорх 'Мэдээлэл' хэсэгт байгаа текст дээр тулгуурлан асуултад маш тодорхой хариул.
+                        texts, embeddings, index_name=index_name, pinecone_api_key=pinecone_api_key 
 
-            Мэдээлэл:
-            {context}
+                    ) 
 
-            Асуулт:
-            {query}
+                    st.success(f"Successfully synced {len(texts)} text blocks to Pinecone!") 
 
-            Хэрэв өгөгдсөн мэдээлэл дотор хариулт байхгүй бол:
-            "Уучлаарай, миний мэдээллийн санд энэ талаарх мэдээлэл алга байна." гэж хариул.
-            """
-            
-            response = llm.invoke(prompt)
-            
-            # Хариултыг харуулах
-            st.markdown("### 🤖 AI Хариулт:")
-            st.info(response.content)
-            
-            # Эх сурвалжийг харах (Нууц байдлаар)
-            with st.expander("Ашигласан мэдээлэл (Source Context)"):
-                st.write(context)
-                
-        except Exception as e:
-            st.error(f"Алдаа гарлаа: {e}")
+                    st.success(f"Success! {len(texts)} chunks synced using Google Embeddings.") 
+
+                except Exception as e: 
+
+                    st.error(f"Sync failed: {e}") 
+
+                    st.error(f"Sync Error: {e}") 
+
+  
+
+# 4. Chat Interface 
+
+query = st.text_input("Ask a question:", placeholder="Search the Central Test knowledge base...") 
+
+query = st.text_input("Ask a question:", placeholder="Search Central Test documents...") 
+
+  
+
+if query: 
+
+    if not google_api_key or not pinecone_api_key: 
+
+        st.warning("API keys are missing. Please verify your Streamlit Secrets.") 
+
+    else: 
+
+        with st.spinner("Analyzing data and generating response..."): 
+
+            try: 
+
+                # 1. Semantic Search in Pinecone 
+
+                vectorstore = PineconeVectorStore( 
+
+                    index_name=index_name,  
+
+                    embedding=embeddings, 
+
+                    pinecone_api_key=pinecone_api_key 
+
+                ) 
+
+                 
+
+                # Retrieving top 7 most relevant context segments 
+
+                search_results = vectorstore.similarity_search(query, k=7) 
+
+                context = "\n\n".join([doc.page_content for doc in search_results]) 
+
+                 
+
+                # 2. LLM Configuration 
+
+                llm = ChatGoogleGenerativeAI( 
+
+                    model="gemini-2.5-flash-lite",  
+
+                    google_api_key=google_api_key, 
+
+                    temperature=0.1 
+
+                ) 
+
+                 
+
+                # Mongolian prompt ensures the AI responds in the correct language and context 
+
+                prompt = f""" 
+
+                Та бол Central Test компанийн албан ёсны AI туслах байна.  
+
+                Доорх 'Мэдээлэл' хэсэгт байгаа текст дээр тулгуурлан хэрэглэгчийн асуултанд маш дэлгэрэнгүй, эелдэг хариулна уу. 
+
+                 
+
+                Мэдээлэл: 
+
+                {context} 
+
+                 
+
+                Асуулт: {query} 
+
+                 
+
+                ХАРИУЛАХ ЗААВАР: 
+
+                1. Зөвхөн өгөгдсөн 'Мэдээлэл' доторх текстийг ашигла. 
+
+                2. Хэрэв мэдээлэл дотор хариулт байвал түүнийг логиктой, эмх цэгцтэй (магадгүй жагсаалтаар) тайлбарла. 
+
+                3. Хэрэв асуултанд хариулах мэдээлэл огт байхгүй бол "Уучлаарай, миний мэдээллийн санд энэ талаарх мэдээлэл алга байна. Та асуултаа арай өөрөөр асууж үзнэ үү?" гэж хариулаарай. 
+
+                4. Хэзээ ч мэдээллийн санд байхгүй зүйлийг өөрөө зохиож хариулж болохгүй. 
+
+                """ 
+
+                 
+
+                response = llm.invoke(prompt) 
+
+                 
+
+                # Output results to the user 
+
+                st.markdown("### 🤖 AI Response:") 
+
+                st.write(response.content) 
+
+                 
+
+                # Transparency section 
+
+                with st.expander("Show retrieved data (Source context)"): 
+
+                    st.info(context) 
+
+                     
+
+            except Exception as e: 
+
+                st.error(f"System error: {e}") 
+
+    with st.spinner("AI is thinking..."): 
+
+        try: 
+
+            vectorstore = PineconeVectorStore( 
+
+                index_name=index_name, embedding=embeddings, pinecone_api_key=pinecone_api_key 
+
+            ) 
+
+            # Retrieve top 7 relevant pieces 
+
+            search_results = vectorstore.similarity_search(query, k=7) 
+
+            context = "\n\n".join([doc.page_content for doc in search_results]) 
+
+             
+
+            llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=google_api_key, temperature=0.1) 
+
+             
+
+            prompt = f""" 
+
+            Та бол Central Test компанийн албан ёсны AI туслах байна.  
+
+            Доорх мэдээлэлд тулгуурлан асуултанд монгол хэлээр маш тодорхой хариулна уу. 
+
+             
+
+            Мэдээлэл: {context} 
+
+            Асуулт: {query} 
+
+            Хэрэв мэдээлэлд хариулт байхгүй бол 'Мэдээлэл алга' гэж хэлээрэй. 
+
+            """ 
+
+             
+
+            response = llm.invoke(prompt) 
+
+            st.markdown("### 🤖 AI Response:") 
+
+            st.write(response.content) 
+
+             
+
+            with st.expander("Show Context (DEBUG)"): 
+
+                st.info(context) 
+
+        except Exception as e: 
+
+            st.error(f"Error: {e}") 
