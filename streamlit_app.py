@@ -19,7 +19,7 @@ index_name = "centralai"
 def load_models():
     # Pinecone индекс 768 хэмжээстэй тул Google-ийн 768 хэмжээстэй моделийг ашиглана
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004", 
+        model="models/text-embedding-001", 
         google_api_key=google_api_key
     )
     # Pinecone холболт
