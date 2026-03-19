@@ -17,8 +17,8 @@ index_name = "centralai"
 # 2. Model Loading (Cached for Performance)
 @st.cache_resource
 def load_models():
-    # Embedding model: 384 dimensions for all-MiniLM-L6-v2
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    # Embedding model: 768 dimensions for gemini-embedding-001
+    embeddings = HuggingFaceEmbeddings(model_name="gemini-embedding-001")
     # Pinecone initialization
     pc = Pinecone(api_key=pinecone_api_key)
     return embeddings, pc
