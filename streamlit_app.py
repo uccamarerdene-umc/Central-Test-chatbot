@@ -1,93 +1,151 @@
 import streamlit as st
 import os
+
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.document_loaders import DirectoryLoader, Docx2txtLoader
-from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pinecone import Pinecone
+from langchain_pinecone import PineconeVectorStore
 
-# 1. Тохиргоо
+from pinecone import Pinecone, ServerlessSpec
+
+# ==============================
+# 1. APP CONFIG
+# ==============================
 st.set_page_config(page_title="Central Test AI Assistant", page_icon="🤖")
 
 google_api_key = st.secrets.get("GOOGLE_API_KEY")
 pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
-index_name = "centralai"
 
-# 2. Модель ачааллах (768 Dimension тааруулах)
+index_name = "centralai"
+dimension = 768  # embedding хэмжээ
+
+# ==============================
+# 2. CHECK API KEYS
+# ==============================
+if not google_api_key or not pinecone_api_key:
+    st.error("❌ API түлхүүрүүд тохируулагдаагүй байна! (Secrets шалгана уу)")
+    st.stop()
+
+# ==============================
+# 3. LOAD MODELS
+# ==============================
 @st.cache_resource
 def load_models():
-    # 'models/' угтварыг нэмж өгснөөр API-д илүү ойлгомжтой болно
-    # text-embedding-004 нь яг 768 хэмжээстэй вектор үүсгэдэг
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/text-embedding-004", 
+        model="text-embedding-004",  # ✅ ЗӨВ MODEL
         google_api_key=google_api_key
     )
-    pc = Pinecone(api_key=pinecone_api_key)
-    return embeddings, pc
 
-if not google_api_key or not pinecone_api_key:
-    st.error("API түлхүүрүүд тохируулагдаагүй байна! Streamlit Secrets-ээ шалгана уу.")
-    st.stop()
+    pc = Pinecone(api_key=pinecone_api_key)
+
+    # Index байгаа эсэх шалгах
+    if index_name not in [i["name"] for i in pc.list_indexes()]:
+        pc.create_index(
+            name=index_name,
+            dimension=dimension,
+            metric="cosine",
+            spec=ServerlessSpec(
+                cloud="aws",
+                region="us-east-1"
+            )
+        )
+
+    return embeddings, pc
 
 embeddings, pc = load_models()
 
-# 3. Sidebar - Sync Data
+# ==============================
+# 4. SIDEBAR - SYNC DATA
+# ==============================
 with st.sidebar:
     st.header("⚙️ Settings")
-    if st.button("🔄 Sync Data to Cloud"):
+
+    if st.button("🔄 Sync Data to Pinecone"):
         if not os.path.exists("Data"):
-            st.error("'Data' хавтас олдсонгүй!")
+            st.error("❌ 'Data' хавтас олдсонгүй!")
         else:
-            with st.spinner("Pinecone-руу илгээж байна..."):
+            with st.spinner("📤 Pinecone-д өгөгдөл илгээж байна..."):
                 try:
-                    loader = DirectoryLoader("Data", glob="./*.docx", loader_cls=Docx2txtLoader)
+                    loader = DirectoryLoader(
+                        "Data",
+                        glob="**/*.docx",
+                        loader_cls=Docx2txtLoader
+                    )
                     docs = loader.load()
 
                     if not docs:
-                        st.warning(".docx файл олдсонгүй.")
+                        st.warning("⚠️ .docx файл олдсонгүй.")
                     else:
                         # Chunking
-                        splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
+                        splitter = RecursiveCharacterTextSplitter(
+                            chunk_size=800,
+                            chunk_overlap=150
+                        )
                         texts = splitter.split_documents(docs)
 
-                        # Хадгалах
-                        PineconeVectorStore.from_documents(
-                            texts, 
-                            embeddings, 
+                        # Vector store
+                        vectorstore = PineconeVectorStore.from_documents(
+                            documents=texts,
+                            embedding=embeddings,
                             index_name=index_name,
                             pinecone_api_key=pinecone_api_key
                         )
-                        st.success(f"Амжилттай! {len(texts)} хэсэг өгөгдөл хадгалагдлаа.")
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
 
-# 4. Chat
+                        st.success(f"✅ {len(texts)} chunk амжилттай хадгалагдлаа!")
+
+                except Exception as e:
+                    st.error(f"❌ Sync failed: {str(e)}")
+
+# ==============================
+# 5. CHAT UI
+# ==============================
 st.title("🤖 Central Test AI Assistant")
+
 query = st.text_input("Асуултаа бичнэ үү:")
 
 if query:
-    with st.spinner("AI хариулт боловсруулж байна..."):
+    with st.spinner("🤖 AI бодож байна..."):
         try:
+            # Vector store load
             vectorstore = PineconeVectorStore(
-                index_name=index_name, 
+                index_name=index_name,
                 embedding=embeddings,
                 pinecone_api_key=pinecone_api_key
             )
 
-            search_results = vectorstore.similarity_search(query, k=5)
-            context = "\n\n".join([doc.page_content for doc in search_results])
+            # Search
+            results = vectorstore.similarity_search(query, k=5)
 
+            if not results:
+                st.warning("⚠️ Холбогдох мэдээлэл олдсонгүй.")
+                st.stop()
+
+            context = "\n\n".join([doc.page_content for doc in results])
+
+            # LLM
             llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash", 
+                model="gemini-1.5-flash",
                 google_api_key=google_api_key,
                 temperature=0.2
             )
 
-            prompt = f"Мэдээлэл: {context}\n\nАсуулт: {query}"
+            prompt = f"""
+Та бол Central Test AI Assistant.
+
+Доорх мэдээлэлд үндэслэн асуултад хариул.
+Хэрэв мэдээлэл дутуу бол "Мэдээлэл хангалтгүй байна" гэж хэл.
+
+--- МЭДЭЭЛЭЛ ---
+{context}
+
+--- АСУУЛТ ---
+{query}
+"""
+
             response = llm.invoke(prompt)
 
-            st.markdown("### 🤖 AI Хариулт:")
+            st.markdown("### 🤖 Хариулт:")
             st.write(response.content)
 
         except Exception as e:
-            st.error(f"Алдаа гарлаа: {e}")
+            st.error(f"❌ Алдаа гарлаа: {str(e)}")
